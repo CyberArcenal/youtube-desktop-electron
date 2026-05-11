@@ -1,0 +1,9 @@
+node_modules
+*.db
+App.db-wal
+App.db-shm
+.env
+/dist
+/release
+TODO
+TODO2

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Desktop</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+      background: radial-gradient(circle at 30% 10%, #0f0f0f, #030303);
+      color: #ffffff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .splash {
+      text-align: center;
+      width: 480px;
+      padding: 40px 30px;
+      animation: fadeInUp 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* YouTube Logo Style */
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .play-icon {
+      width: 48px;
+      height: 48px;
+      background: #ff0000;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 20px rgba(255, 0, 0, 0.3);
+    }
+    .play-icon svg {
+      width: 28px;
+      height: 28px;
+      fill: white;
+      margin-left: 4px;
+    }
+
+    .logo-text {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff, #aaaaaa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .logo-text span {
+      color: #ff0000;
+      background: none;
+      -webkit-background-clip: unset;
+      background-clip: unset;
+    }
+
+    .tagline {
+      font-size: 14px;
+      opacity: 0.7;
+      margin-top: -8px;
+      margin-bottom: 48px;
+      font-weight: 400;
+      letter-spacing: 0.3px;
+      color: #aaa;
+    }
+
+    /* Loading section */
+    .loading-area {
+      width: 100%;
+      margin-bottom: 40px;
+    }
+
+    .status-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #ff0000;
+      background: rgba(255, 0, 0, 0.1);
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 40px;
+      letter-spacing: 0.5px;
+      backdrop-filter: blur(2px);
+      margin-bottom: 20px;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 8px 0 12px 0;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: #ff0000;
+      border-radius: 4px;
+      transition: width 0.25s ease-out;
+      box-shadow: 0 0 6px #ff0000;
+    }
+
+    .message {
+      font-size: 12px;
+      opacity: 0.7;
+      font-weight: 400;
+      color: #ccc;
+      margin-top: 12px;
+    }
+
+    /* Animated dots */
+    .loader-dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      background-color: #ff0000;
+      border-radius: 50%;
+      opacity: 0.4;
+      animation: pulse 1.2s infinite ease-in-out;
+    }
+    .dot:nth-child(1) { animation-delay: 0s; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); background-color: #ff3333; }
+    }
+
+    /* Footer */
+    .footer {
+      position: absolute;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: #5a5a5a;
+    }
+  </style>
+</head>
+<body>
+<div class="splash">
+  <div class="logo">
+    <div class="play-icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
+    <div class="logo-text">YouTube<span>Desktop</span></div>
+  </div>
+  <div class="tagline">fast · offline · modern</div>
+
+  <div class="loading-area">
+    <div class="status-text" id="statusLabel">STARTING</div>
+    <div class="progress-bar-container">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="message" id="loadingMessage">Loading environment...</div>
+    <div class="loader-dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+</div>
+<div class="footer">
+  <span id="versionPlaceholder">YouTube Desktop</span> • ready for you
+</div>
+
+<script>
+  (function() {
+    // DOM elements
+    const statusEl = document.getElementById('statusLabel');
+    const progressFill = document.getElementById('progressFill');
+    const msgEl = document.getElementById('loadingMessage');
+    const versionSpan = document.getElementById('versionPlaceholder');
+
+    // Helper to update UI
+    function setStatus(step, percent = null, message = null) {
+      if (statusEl) statusEl.innerText = step.toUpperCase();
+      if (percent !== null && progressFill) {
+        let p = Math.min(100, Math.max(0, percent));
+        progressFill.style.width = p + '%';
+      }
+      if (message && msgEl) msgEl.innerText = message;
+    }
+
+    // Default animation: simulate steps until real events arrive
+    let step = 0;
+    const steps = [
+      { status: 'INIT', percent: 10, msg: 'Starting core services...' },
+      { status: 'CACHE', percent: 30, msg: 'Preparing local cache...' },
+      { status: 'UI', percent: 60, msg: 'Loading interface...' },
+      { status: 'READY', percent: 90, msg: 'Almost there...' }
+    ];
+
+    function animateSteps() {
+      if (step < steps.length) {
+        const s = steps[step];
+        setStatus(s.status, s.percent, s.msg);
+        step++;
+        setTimeout(animateSteps, 500);
+      } else {
+        // keep waiting for app:ready event
+        setStatus('WAITING', 95, 'Finalizing...');
+      }
+    }
+
+    // Check if electronAPI is available (preload)
+    if (window.electronAPI && typeof window.electronAPI.on === 'function') {
+      // Listen to progress events from main process (updater / init)
+      window.electronAPI.on('update:progress', (progress) => {
+        if (progress && progress.percent) {
+          let pct = Math.floor(progress.percent);
+          setStatus('UPDATING', pct, `Downloading update ${pct}%`);
+        }
+      });
+      window.electronAPI.on('update:available', (info) => {
+        setStatus('UPDATE', 20, `New version ${info.version} available`);
+      });
+      window.electronAPI.on('update:downloaded', () => {
+        setStatus('READY', 100, 'Update ready, restarting...');
+      });
+      window.electronAPI.on('app:ready', () => {
+        setStatus('LAUNCH', 100, 'Starting main window...');
+      });
+
+      // Optional: if we have custom loading steps from main (e.g., checking files)
+      window.electronAPI.on('splash:status', (data) => {
+        if (data.status) setStatus(data.status, data.percent || null, data.message);
+      });
+    } else {
+      console.warn('electronAPI not exposed, fallback animation only');
+    }
+
+    // Set version from app info if possible
+    if (window.electronAPI && window.electronAPI.getAppInfo) {
+      window.electronAPI.getAppInfo().then(info => {
+        if (info && info.version && versionSpan) {
+          versionSpan.innerText = `v${info.version}`;
+        }
+      }).catch(() => {});
+    } else {
+      // fallback placeholder
+      if (versionSpan) versionSpan.innerText = 'v0.1.0';
+    }
+
+    // start animation steps
+    animateSteps();
+
+    // If after 8 seconds still no ready event, force complete (avoid infinite splash)
+    setTimeout(() => {
+      if (progressFill && progressFill.style.width !== '100%') {
+        setStatus('READY', 100, 'Starting application...');
+      }
+    }, 8000);
+  })();
+</script>
+</body>
+</html>

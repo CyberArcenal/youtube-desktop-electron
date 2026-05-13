@@ -1,12 +1,9 @@
 // src/renderer/pages/watch/hooks/useWatchData.ts
 import { useEffect, useState } from "react";
-import {
-  getVideoInfo,
-  getVideoStreamingUrl,
-  getRelatedVideos,
-  type VideoInfo,
-  type VideoItem,
-} from "../../../services/youtube";
+import { getVideoInfo, getVideoStreamingUrl } from "../../../services/player";
+import { getRelatedVideos } from "../../../services/related";
+import type { VideoInfo, VideoItem } from "../../../services/types";
+
 
 export function useWatchData(videoId: string | undefined) {
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
@@ -27,7 +24,7 @@ export function useWatchData(videoId: string | undefined) {
           getRelatedVideos(videoId),
         ]);
         setVideoInfo(info);
-        setStreamingUrl(url);
+        setStreamingUrl(url as string);
         setRelated(relatedVideos);
       } catch (err: any) {
         setError(err.message || "Failed to load video");

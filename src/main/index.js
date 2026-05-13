@@ -13,14 +13,39 @@ const {
 const path = require("path");
 const fs = require("fs");
 const url = require("url");
-
+const { registerAuthHandlers } = require("./ipc/core/auth.ipc.js");
+const { registerFeedHandlers } = require("./ipc/core/feed.ipc.js");
+const { registerPlayerHandlers } = require("./ipc/core/player.ipc.js");
+const { registerChannelHandlers } = require("./ipc/core/channel.ipc.js");
+const { registerCommentsHandlers } = require("./ipc/core/comments.ipc.js");
+const {
+  registerInteractionsHandlers,
+} = require("./ipc/core/interactions.ipc.js");
+const { registerPlaylistHandlers } = require("./ipc/core/playlist.ipc.js");
+const { registerSearchHandlers } = require("./ipc/core/search.ipc.js");
+const { registerHistoryHandlers } = require("./ipc/core/history.ipc.js");
+const {
+  registerNotificationHandlers,
+} = require("./ipc/core/notifications.ipc.js");
+const { registerRelatedHandlers } = require("./ipc/core/related.ipc.js");
+const { registerWatchLaterHandlers } = require("./ipc/core/watchlater.ipc.js");
+const { getInnertube } = require("../services/core.js");
+const { logger } = require("../utils/logger.js");
+const core = require("../services/index");
+const auth = require("../services/auth.js");
 // ===================== CONFIGURATION =====================
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const appName = "YouTube Desktop";
 const userDataPath = app.getPath("userData");
 const version = app.getVersion();
 
+/**
+ * @type {{ session: { credentials: any; }; } | null}
+ */
+let innertubeInstance = null;
+
 // ===================== LOGGING =====================
+// @ts-ignore
 // @ts-ignore
 // @ts-ignore
 const LogLevel = {
@@ -74,6 +99,7 @@ function registerBasicIpcHandlers() {
   );
 
   // @ts-ignore
+  // @ts-ignore
   ipcMain.on("app:open-external", (event, url) => {
     if (url?.startsWith("http")) shell.openExternal(url);
   });
@@ -86,142 +112,18 @@ function registerBasicIpcHandlers() {
     userDataPath,
   }));
 
-  // ===================== MODULAR YOUTUBE SERVICE =====================
-  const youtubeService = require("../services/index.js");
-
-  // Auth
-  ipcMain.handle("youtube:authenticate", async () => {
-    await youtubeService.authenticate();
-    return { success: true };
-  });
-  ipcMain.handle(
-    "youtube:isLoggedIn",
-    async () => await youtubeService.isLoggedIn(),
-  );
-
-  // Feed
-ipcMain.handle("youtube:getHomeFeed", async (event, continuation) => {
-  return await youtubeService.getHomeFeed(continuation);
-});
-ipcMain.handle("youtube:getSubscriptionsFeed", async (event, continuation) => {
-  return await youtubeService.getSubscriptionsFeed(continuation);
-});
-ipcMain.handle("youtube:getTrendingVideos", async (event, continuation) => {
-  return await youtubeService.getTrendingVideos(continuation);
-});
-ipcMain.handle("youtube:search", async (event, query, continuation) => {
-  return await youtubeService.searchVideos(query, continuation);
-});
-
-  // Player
-  ipcMain.handle(
-    "youtube:getVideoInfo",
-    // @ts-ignore
-    async (event, videoId) => await youtubeService.getVideoInfo(videoId),
-  );
-  ipcMain.handle(
-    "youtube:getStreamingUrl",
-    // @ts-ignore
-    async (event, videoId) =>
-      await youtubeService.getVideoStreamingUrl(videoId),
-  );
-
-  // Comments
-  ipcMain.handle(
-    "youtube:getComments",
-    // @ts-ignore
-    async (event, videoId) => await youtubeService.getVideoComments(videoId),
-  );
-  ipcMain.handle(
-    "youtube:getCommentsInitial",
-    // @ts-ignore
-    async (event, videoId) =>
-      await youtubeService.getVideoCommentsWithToken(videoId),
-  );
-
-  ipcMain.handle(
-    "youtube:getMoreComments",
-    // @ts-ignore
-    async (event, videoId, continuation) =>
-      await youtubeService.getMoreComments(videoId, continuation),
-  );
-
-  // Channel
-  ipcMain.handle(
-    "youtube:getChannelInfo",
-    // @ts-ignore
-    async (event, channelId) => await youtubeService.getChannelInfo(channelId),
-  );
-  ipcMain.handle(
-    "youtube:getChannelVideos",
-    // @ts-ignore
-    async (event, channelId) =>
-      await youtubeService.getChannelVideos(channelId),
-  );
-  ipcMain.handle(
-    "youtube:getChannelPlaylists",
-    // @ts-ignore
-    async (event, channelId) =>
-      await youtubeService.getChannelPlaylists(channelId),
-  );
-
-  // Playlist
-  ipcMain.handle(
-    "youtube:getUserPlaylists",
-    async () => await youtubeService.getUserPlaylists(),
-  );
-  ipcMain.handle(
-    "youtube:getPlaylistVideos",
-    // @ts-ignore
-    async (event, playlistId) =>
-      await youtubeService.getPlaylistVideos(playlistId),
-  );
-
-  // Related
-  ipcMain.handle(
-    "youtube:getRelatedVideos",
-    // @ts-ignore
-    async (event, videoId) => await youtubeService.getRelatedVideos(videoId),
-  );
-
-  // Interactions
-  ipcMain.handle(
-    "youtube:subscribe",
-    // @ts-ignore
-    async (event, channelId) => await youtubeService.subscribe(channelId),
-  );
-  ipcMain.handle(
-    "youtube:unsubscribe",
-    // @ts-ignore
-    async (event, channelId) => await youtubeService.unsubscribe(channelId),
-  );
-  ipcMain.handle(
-    "youtube:likeVideo",
-    // @ts-ignore
-    async (event, videoId) => await youtubeService.likeVideo(videoId),
-  );
-  ipcMain.handle(
-    "youtube:dislikeVideo",
-    // @ts-ignore
-    async (event, videoId) => await youtubeService.dislikeVideo(videoId),
-  );
-  ipcMain.handle(
-    "youtube:commentOnVideo",
-    // @ts-ignore
-    async (event, videoId, text) =>
-      await youtubeService.commentOnVideo(videoId, text),
-  );
-  ipcMain.handle(
-    "youtube:replyToComment",
-    // @ts-ignore
-    async (event, commentId, text) =>
-      await youtubeService.replyToComment(commentId, text),
-  );
-  ipcMain.handle(
-    "youtube:likeComment",
-    // @ts-ignore
-    async (event, commentId) => await youtubeService.likeComment(commentId),
-  );
+  registerAuthHandlers();
+  registerFeedHandlers();
+  registerPlayerHandlers();
+  registerCommentsHandlers();
+  registerChannelHandlers();
+  registerPlaylistHandlers();
+  registerInteractionsHandlers();
+  registerSearchHandlers();
+  registerRelatedHandlers();
+  registerHistoryHandlers();
+  registerWatchLaterHandlers();
+  registerNotificationHandlers();
 }
 
 /**
@@ -423,7 +325,15 @@ async function addHeadersInterceptor() {
     callback({ requestHeaders: details.requestHeaders });
   });
 }
-
+async function setupInnertubeSession() {
+  // @ts-ignore
+  innertubeInstance = await getInnertube();
+  // @ts-ignore
+  innertubeInstance.session.on("auth-refresh", () => {
+    // @ts-ignore
+    saveCredentials(innertubeInstance.session.credentials);
+  });
+}
 // ===================== STARTUP SEQUENCE =====================
 async function startupSequence() {
   try {
@@ -436,6 +346,8 @@ async function startupSequence() {
     await createSplashWindow();
     await createMainWindow();
     loadExternalModules();
+    await setupInnertubeSession();
+    core.startCookieValidityChecker(30 * 60 * 1000); // every 30 mins
 
     log("SUCCESS", "✅ Application started successfully");
   } catch (error) {
@@ -459,4 +371,22 @@ app.on("activate", () => {
 });
 app.on("before-quit", () => {
   isShuttingDown = true;
+});
+
+app.on('youtube:need-cookie-refresh', async () => {
+  // Prevent multiple calls if many listeners fire at once
+  if (global._refreshInProgress) return;
+  global._refreshInProgress = true;
+  try {
+    logger.info('Refreshing cookie from current session...');
+    const success = await auth.refreshCookiesFromCurrentSession();
+    if (success) {
+      logger.info('Cookie refreshed successfully');
+      if (mainWindow) mainWindow.webContents.send('youtube:refresh-feed');
+    } else {
+      logger.error('Failed to refresh cookie');
+    }
+  } finally {
+    global._refreshInProgress = false;
+  }
 });

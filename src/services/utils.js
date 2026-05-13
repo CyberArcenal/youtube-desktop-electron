@@ -8,6 +8,7 @@ function extractText(field) {
   return "";
 }
 
+// src/main/services/youtube/utils.js
 function _formatVideo(video) {
   if (!video) return null;
   let duration = "";
@@ -21,10 +22,28 @@ function _formatVideo(video) {
     duration = `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
+  // Subukan lahat ng posibleng thumbnail sources
+  let thumbnail = "";
+  if (video.thumbnails?.[0]?.url) {
+    thumbnail = video.thumbnails[0].url;
+  } else if (video.thumbnail?.url) {
+    thumbnail = video.thumbnail.url;
+  } else if (typeof video.thumbnail === "string") {
+    thumbnail = video.thumbnail;
+  } else if (video.thumbnails?.length > 0 && video.thumbnails[0]?.url) {
+    thumbnail = video.thumbnails[0].url;
+  } else if (video.Thumbnail?.url) {
+    thumbnail = video.Thumbnail.url;
+  } else if (video.thumbnail_url) {
+    thumbnail = video.thumbnail_url;
+  } else if (video.thumbnails?.[0]?.thumbnails?.[0]?.url) {
+    thumbnail = video.thumbnails[0].thumbnails[0].url;
+  }
+
   return {
     id: video.id || video.videoId || "",
     title: extractText(video.title),
-    thumbnail: video.thumbnails?.[0]?.url || "",
+    thumbnail,
     channelName: extractText(video.author?.name || video.channel?.name),
     channelId: video.author?.id || video.channel?.id || "",
     viewCount: extractText(video.view_count || video.viewCount) || "0",

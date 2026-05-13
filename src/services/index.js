@@ -2,6 +2,8 @@
 const auth = require("./auth");
 const player = require("./player");
 const feed = require("./feed");
+const history = require("./history");
+const watchLater = require("./watchLater");
 const search = require("./search");
 const channel = require("./channel");
 const playlist = require("./playlist");
@@ -17,6 +19,10 @@ module.exports = {
   // Auth
   authenticate: auth.authenticate,
   isLoggedIn: auth.isLoggedIn,
+  signOut: auth.signOut,
+
+  getWatchLaterVideos: watchLater.getWatchLaterVideos,
+  getWatchHistory: history.getWatchHistory,
 
   // Player & Streaming
   getVideoInfo: player.getVideoInfo,

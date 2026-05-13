@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { MessageCircle, ThumbsUp } from "lucide-react";
 import { ReplyInput } from "./ReplyInput";
-import type { Comment } from "../../../services/youtube";
+import type { Comment } from "../../../services/types";
 
 interface CommentItemProps {
   comment: Comment;

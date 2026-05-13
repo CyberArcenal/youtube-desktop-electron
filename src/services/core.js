@@ -1,141 +1,189 @@
-// src/main/services/youtube/core.js
+//@ts-check
 const { Innertube, UniversalCache, ClientType } = require("youtubei.js");
 const { app } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { logger } = require("../utils/logger");
 
-const userDataPath = app.getPath("userData");
-const cacheDir = path.join(userDataPath, "youtube-cache");
-const credsFilePath = path.join(userDataPath, "youtube-credentials.json");
+const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
-if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+const baseDataPath = isDev
+  ? path.join(process.cwd(), "data")
+  : app.getPath("userData");
 
+const cacheDir = path.join(baseDataPath, "youtube-cache");
+const cookiePath = path.join(baseDataPath, "youtube-cookie.json");
+
+if (!fs.existsSync(cacheDir)) {
+  fs.mkdirSync(cacheDir, { recursive: true });
+}
+
+/**
+ * @type {Innertube | null}
+ */
 let innertube = null;
 
-// ---------- Save / Load Credentials ----------
-function saveCredentials(credentials) {
-  try {
-    if (!credentials) return;
-    // Convert Date to number for JSON
-    const cleaned = JSON.parse(JSON.stringify(credentials, (key, value) => {
-      if (value instanceof Date) return value.getTime();
-      if (value === undefined) return null;
-      return value;
-    }));
-    fs.writeFileSync(credsFilePath, JSON.stringify(cleaned, null, 2));
-    logger.info("✅ Credentials saved");
-  } catch (err) {
-    logger.error("Failed to save credentials:", err.message);
-  }
+/**
+ * @param {fs.PathLike} filePath
+ * @param {string | NodeJS.ArrayBufferView<ArrayBufferLike>} data
+ */
+function atomicWriteFileSync(filePath, data) {
+  // @ts-ignore
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.tmp-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(tmp, data, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(tmp, filePath);
 }
 
-function loadCredentials() {
+/**
+ * @param {string} cookieString
+ */
+function saveCookie(cookieString) {
   try {
-    if (fs.existsSync(credsFilePath)) {
-      const data = JSON.parse(fs.readFileSync(credsFilePath, "utf8"));
-      // ✅ Convert expiry_date back to Date object (critical for session restoration)
-      if (data.expiry_date && typeof data.expiry_date === "number") {
-        data.expiry_date = new Date(data.expiry_date);
-      }
-      return data;
-    }
+    if (!cookieString?.trim()) return;
+    atomicWriteFileSync(
+      cookiePath,
+      JSON.stringify({ cookie: cookieString.trim() }, null, 2),
+    );
+    logger.info("✅ Cookie saved successfully");
+    return true;
   } catch (err) {
-    logger.warn("Failed to load credentials:", err.message);
-  }
-  return null;
-}
-
-// ---------- Manual Token Refresh ----------
-async function refreshSession(yt) {
-  if (!yt || !yt.session) return false;
-  try {
-    // Try both possible method names
-    if (typeof yt.session.refresh === "function") {
-      await yt.session.refresh();
-    } else if (typeof yt.session.refreshAccessToken === "function") {
-      await yt.session.refreshAccessToken();
-    } else {
-      return false;
-    }
-    return yt.session.logged_in;
-  } catch (err) {
-    logger.warn("Token refresh failed:", err.message);
+    // @ts-ignore
+    logger.error("❌ Failed to save cookie:", err.message);
     return false;
   }
 }
 
-// ---------- Innertube Factory ----------
-async function getInnertube(forceNew = false) {
-  if (!innertube || forceNew) {
-    const saved = loadCredentials();
-
-    if (saved) {
-      logger.info("🔄 Loading saved credentials...");
-      try {
-        innertube = await Innertube.create({
-          cache: new UniversalCache(cacheDir),
-          session: { credentials: saved },
-          clientType: ClientType.WEB,
-        });
-
-        if (!innertube.session.logged_in) {
-          logger.info("⚠️ Session expired – attempting refresh...");
-          const refreshed = await refreshSession(innertube);
-          if (refreshed) {
-            logger.info("✅ Session restored after refresh");
-            if (innertube.session.credentials) {
-              saveCredentials(innertube.session.credentials);
-            }
-          } else {
-            logger.warn("❌ Refresh failed – credentials cleared");
-            clearCredentials();
-            // Create a fresh unauthenticated instance
-            innertube = await Innertube.create({
-              cache: new UniversalCache(cacheDir),
-              clientType: ClientType.WEB,
-            });
-          }
-        } else {
-          logger.info("✅ Session restored (logged in)");
-        }
-      } catch (err) {
-        logger.error("Failed to restore session:", err.message);
-        clearCredentials();
-        innertube = await Innertube.create({
-          cache: new UniversalCache(cacheDir),
-          clientType: ClientType.WEB,
-        });
-      }
-    } else {
-      logger.info("🔧 No saved credentials – creating fresh instance");
-      innertube = await Innertube.create({
-        cache: new UniversalCache(cacheDir),
-        clientType: ClientType.WEB,
-      });
-    }
-
-    // Listen for automatic token refreshes during runtime
-    innertube.session.on("auth", (event) => {
-      if (event.credentials) {
-        saveCredentials(event.credentials);
-        logger.info("🔄 Credentials updated via auth event");
-      }
-    });
+function loadCookie() {
+  try {
+    if (!fs.existsSync(cookiePath)) return null;
+    const data = JSON.parse(fs.readFileSync(cookiePath, "utf8"));
+    return data.cookie || null;
+  } catch (err) {
+    // @ts-ignore
+    logger.error("❌ Failed to load cookie:", err.message);
+    return null;
   }
+}
+
+function clearCookie() {
+  try {
+    if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
+    innertube = null;
+    logger.info("🗑️ Cookie cleared");
+  } catch (e) {}
+}
+function resetInnertube() {
+  innertube = null;
+  logger.info("🔄 Innertube instance reset");
+}
+
+// Idagdag ito sa core.js
+
+/**
+ * Check if the current Innertube cookie is still valid
+ * Returns true if account info is available, false otherwise
+ */
+async function isCookieValid() {
+  try {
+    if (!innertube) return false;
+    const account = await innertube.account.getInfo().catch(() => null);
+    // @ts-ignore
+    return account?.name ? true : false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refresh cookie from current session (using the auth module's function)
+ * This avoids circular dependency; you can pass a callback or use event
+ * @param {() => any} sessionCookieExtractor
+ */
+async function refreshCookieFromSession(sessionCookieExtractor) {
+  if (typeof sessionCookieExtractor === "function") {
+    const newCookie = await sessionCookieExtractor();
+    if (newCookie) {
+      saveCookie(newCookie);
+      resetInnertube();
+      return true;
+    }
+  }
+  return false;
+}
+
+// Modified getInnertube with auto-refresh logic
+async function getInnertube(forceNew = false) {
+  if (innertube && !forceNew) return innertube;
+
+  const savedCookie = loadCookie();
+
+  const headers = {
+    'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://www.youtube.com',
+    'Referer': 'https://www.youtube.com/'
+  };
+
+  if (savedCookie) {
+    headers['Cookie'] = savedCookie;
+  }
+
+  innertube = await Innertube.create({
+    cache: new UniversalCache(cacheDir),
+    clientType: ClientType.WEB,
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    fetchOptions: {
+      headers: headers
+    }
+  });
+
+  logger.info("✅ Innertube created with Cookie");
+
+  try {
+    const account = await innertube.account.getInfo();
+    logger.info(`✅ Logged in as: ${account.name}`);
+  } catch (e) {
+    logger.warn("Account info failed (still 401 possible)");
+  }
+
   return innertube;
 }
 
-function clearCredentials() {
-  try {
-    if (fs.existsSync(credsFilePath)) fs.unlinkSync(credsFilePath);
-    logger.info("🗑️ Credentials cleared");
-  } catch (err) {}
+// Optional: Set up a periodic validator (every 30 minutes)
+/**
+ * @type {string | number | NodeJS.Timeout | null | undefined}
+ */
+let validityInterval = null;
+function startCookieValidityChecker(checkIntervalMs = 30 * 60 * 1000) {
+  if (validityInterval) clearInterval(validityInterval);
+  validityInterval = setInterval(async () => {
+    if (innertube) {
+      const valid = await isCookieValid();
+      if (!valid) {
+        logger.warn("Cookie validation failed, need refresh");
+        const { app } = require("electron");
+        app.emit("youtube:need-cookie-refresh");
+      }
+    }
+  }, checkIntervalMs);
+}
+
+function stopCookieValidityChecker() {
+  if (validityInterval) {
+    clearInterval(validityInterval);
+    validityInterval = null;
+  }
 }
 
 module.exports = {
   getInnertube,
-  saveCredentials,
-  loadCredentials,
-  clearCredentials,
+  saveCookie,
+  loadCookie,
+  clearCookie,
+  resetInnertube,
+  stopCookieValidityChecker,
+  startCookieValidityChecker,
+  refreshCookieFromSession,
 };

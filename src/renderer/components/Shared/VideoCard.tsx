@@ -1,7 +1,7 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Clock, Eye } from 'lucide-react';
-import type { VideoItem } from '../../services/youtube';
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { Clock, Eye } from "lucide-react";
+import type { VideoItem } from "../../services/types";
 
 interface VideoCardProps {
   video: VideoItem;
@@ -13,7 +13,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video }) => {
   const handleClick = () => {
     navigate(`/watch/${video.id}`);
   };
-// console.log(video)
+  // console.log(video)
   return (
     <div
       onClick={handleClick}
@@ -26,7 +26,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video }) => {
           className="w-full aspect-video object-cover rounded-xl"
           loading="lazy"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/320x180?text=No+Thumbnail';
+            (e.target as HTMLImageElement).src =
+              "https://via.placeholder.com/320x180?text=No+Thumbnail";
           }}
         />
         <span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
@@ -35,9 +36,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video }) => {
       </div>
       <div className="mt-2 px-1">
         <h3 className="font-semibold text-white line-clamp-2 text-sm group-hover:text-red-500 transition">
-          {typeof video.title === 'string' ? video.title : ''}
+          {typeof video.title === "string" ? video.title : ""}
         </h3>
-        <p className="text-gray-400 text-xs mt-1">{typeof video.channelName === 'string' ? video.channelName : ''}</p>
+        <p
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/channel/${video.channelId}`);
+          }}
+          className="text-gray-400 text-xs mt-1"
+        >
+          {typeof video.channelName === "string" ? video.channelName : ""}
+        </p>
         <div className="flex items-center gap-3 text-gray-400 text-xs mt-1">
           <div className="flex items-center gap-1">
             <Eye size={12} />

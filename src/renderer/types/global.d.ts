@@ -1,5 +1,4 @@
 // src/main/global.d.ts
-
 export interface AppInfo {
   name: string;
   version: string;
@@ -8,125 +7,101 @@ export interface AppInfo {
   userDataPath: string;
 }
 
-export interface VideoItem {
-  id: string;
-  title: string;
-  thumbnail: string;
-  channelName: string;
-  channelId: string;
-  viewCount: string;
-  publishedDate: string;
-  duration: string;
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-export interface VideoInfo {
-  format: {
-    url: string;
-    mimeType: string;
-    qualityLabel: string;
-  };
-  title: string;
-  channel: string;
-  viewCount?: string;
+export interface WindowControlPayload {
+  action: string;
+  params?: any;
 }
-
-export interface Comment {
-  id: string;
-  author: string;
-  authorId?: string;
-  text: string;
-  likes: number;
-  publishedDate: string;
-}
-
-export interface ChannelInfo {
-  id: string;
-  name: string;
-  description: string;
-  avatar?: string;
-  banner?: string;
-  subscriberCount: string;
-}
-
-export interface PlaylistInfo {
-  id: string;
-  title: string;
-  thumbnail?: string;
-  videoCount: number;
-}
-
-// Additional types for comments pagination
-export interface CommentsPage {
-  comments: Comment[];
-  continuation: string | null;
+export interface WindowControlResponse {
+  status: boolean;
+  message?: string;
+  data?: any;
 }
 
 export interface BackendAPI {
-  // ===================== YOUTUBE API =====================
-  youtubeAuthenticate: () => Promise<void>;
-  isYouTubeLoggedIn: () => Promise<boolean>;
-  getHomeFeed: (continuation?: string) => Promise<{ videos: VideoItem[]; continuation: string | null }>;
-  getTrendingVideos: (continuation?: string) => Promise<{ videos: VideoItem[]; continuation: string | null }>;
-  getYouTubeVideoInfo: (videoId: string) => Promise<VideoInfo>;
-  getYouTubeStreamingUrl: (videoId: string) => Promise<string>;
-  getYouTubeComments: (videoId: string) => Promise<Comment[]>;
-  getYouTubeChannelInfo: (channelId: string) => Promise<ChannelInfo>;
-  getYouTubeChannelVideos: (channelId: string) => Promise<VideoItem[]>;
-  getYouTubeChannelPlaylists: (channelId: string) => Promise<PlaylistInfo[]>;
-  getSubscriptionsFeed: (continuation?: string) => Promise<{ videos: VideoItem[]; continuation: string | null }>;
-  getUserPlaylists: () => Promise<PlaylistInfo[]>;
-  getPlaylistVideos: (playlistId: string) => Promise<VideoItem[]>;
-  getRelatedVideos: (videoId: string) => Promise<VideoItem[]>;
-  searchYouTube: (query: string, continuation?: string) => Promise<{ videos: VideoItem[]; continuation: string | null }>;
+  // Auth & session
+  youtubeAuthenticate: () => Promise<any>;
+  isYouTubeLoggedIn: () => Promise<any>;
+  signOut: () => Promise<any>;
+  getUserInfo: () => Promise<any>;
 
-  // Comments pagination (kailangan idagdag sa preload.js)
-  getCommentsInitial: (videoId: string) => Promise<CommentsPage>;
-  getMoreComments: (videoId: string, continuation: string) => Promise<CommentsPage>;
+  // Watch lists
+  getWatchLaterVideos: (continuation?: string) => Promise<any>;
+  getWatchHistory: (continuation?: string) => Promise<any>;
 
-  // Interactions (subscriber, like, comment)
-  subscribe: (channelId: string) => Promise<{ success: boolean }>;
-  unsubscribe: (channelId: string) => Promise<{ success: boolean }>;
-  likeVideo: (videoId: string) => Promise<{ success: boolean }>;
-  dislikeVideo: (videoId: string) => Promise<{ success: boolean }>;
-  commentOnVideo: (videoId: string, text: string) => Promise<{ success: boolean; commentId?: string }>;
-  replyToComment: (commentId: string, text: string) => Promise<{ success: boolean; replyId?: string }>;
-  likeComment: (commentId: string) => Promise<{ success: boolean }>;
+  // Feeds
+  getHomeFeed: (continuation?: string) => Promise<any>;
+  getSubscriptionsFeed: (continuation?: string) => Promise<any>;
+  getTrendingVideos: (continuation?: string) => Promise<any>;
 
-  // ===================== APP INFO =====================
-  getAppInfo: () => Promise<AppInfo>;
+  // Search
+  searchYouTube: (query: string, continuation?: string) => Promise<any>;
 
-  // ===================== FILE OPERATIONS =====================
-  openFile: (filePath: string) => Promise<{ status: boolean; message: string; data?: any }>;
-  showItemInFolder: (filePath: string) => Promise<{ status: boolean; message: string; data?: any }>;
-  getFileInfo: (filePath: string) => Promise<{ status: boolean; message: string; data?: any }>;
-  fileExists: (filePath: string) => Promise<boolean>;
-  openDirectory: (dirPath: string) => Promise<{ status: boolean; message: string; data?: any }>;
-  getFilesInDirectory: (dirPath: string, extensions?: string[]) => Promise<{ status: boolean; message: string; data?: any[] }>;
-  getRecentExports: (exportDir: string, limit?: number) => Promise<{ status: boolean; message: string; data?: any[] }>;
-  deleteFile: (filePath: string) => Promise<{ status: boolean; message: string; data?: any }>;
-  copyFileToClipboard: (filePath: string) => Promise<{ status: boolean; message: string; data?: any }>;
+  // Video / Player
+  getYouTubeVideoInfo: (videoId: string) => Promise<any>;
+  getYouTubeStreamingUrl: (videoId: string) => Promise<any>;
 
-  // ===================== WINDOW CONTROL =====================
-  windowControl: (payload: WindowControlPayload) => Promise<WindowControlResponse>;
+  // Comments & interactions
+  getCommentsInitial: (videoId: string) => Promise<any>;
+  getMoreComments: (videoId: string, continuation: string) => Promise<any>;
+  commentOnVideo: (videoId: string, text: string) => Promise<any>;
+  replyToComment: (commentId: string, text: string) => Promise<any>;
+  likeVideo: (videoId: string) => Promise<any>;
+  dislikeVideo: (videoId: string) => Promise<any>;
+  likeComment: (commentId: string) => Promise<any>;
+  subscribe: (channelId: string) => Promise<any>;
+  unsubscribe: (channelId: string) => Promise<any>;
 
-  // ===================== WINDOW EVENTS =====================
-  onWindowMaximized: (callback: () => void) => void;
-  onWindowRestored: (callback: () => void) => void;
-  onWindowMinimized: (callback: () => void) => void;
-  onWindowClosed: (callback: () => void) => void;
-  onWindowResized: (callback: (bounds: WindowBounds) => void) => void;
-  onWindowMoved: (callback: (position: { x: number; y: number }) => void) => void;
+  // Channel
+  getYouTubeChannelInfo: (channelId: string) => Promise<any>;
+  getYouTubeChannelVideos: (channelId: string) => Promise<any>;
+  getYouTubeChannelPlaylists: (channelId: string) => Promise<any>;
 
-  // ===================== UPDATER =====================
-  updater: (payload: { method: string; params?: any }) => Promise<{
-    status: boolean;
-    message: string;
-    data: any;
-  }>;
+  // Playlists
+  getUserPlaylists: () => Promise<any>;
+  getPlaylistVideos: (playlistId: string) => Promise<any>;
 
-   openExternal: (url) => Promise<void>;
+  // Related / recommendations
+  getRelatedVideos: (videoId: string) => Promise<any>;
 
-  // ===================== GENERIC EVENT LISTENER =====================
+  // App info
+  getAppInfo: () => Promise<any>;
+
+  // File operations
+  openFile: (filePath: string) => Promise<any>;
+  showItemInFolder: (filePath: string) => Promise<any>;
+  getFileInfo: (filePath: string) => Promise<any>;
+  fileExists: (filePath: string) => Promise<any>;
+  openDirectory: (dirPath: string) => Promise<any>;
+  getFilesInDirectory: (dirPath: string, extensions?: string[]) => Promise<any>;
+  getRecentExports: (exportDir: string, limit?: number) => Promise<any>;
+  deleteFile: (filePath: string) => Promise<any>;
+  copyFileToClipboard: (filePath: string) => Promise<any>;
+
+  // Window control
+  windowControl: (payload: WindowControlPayload) => Promise<any>;
+
+  // Window events: return unsubscribe function
+  onWindowMaximized: (callback: () => void) => () => void;
+  onWindowRestored: (callback: () => void) => () => void;
+  onWindowMinimized: (callback: () => void) => () => void;
+  onWindowClosed: (callback: () => void) => () => void;
+  onWindowResized: (callback: (bounds: WindowBounds) => void) => () => void;
+  onWindowMoved: (callback: (position: { x: number; y: number }) => void) => () => void;
+
+  // Updater
+  updater: (payload: { method: string; params?: any }) => Promise<any>;
+
+  // Misc
+  openExternal: (url: string) => Promise<any>;
+
+  // Generic event listener with unsubscribe
   on: (channel: string, callback: (event: any, ...args: any[]) => void) => () => void;
 }
 

@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"electron ./src/main/index.js\"",
-    "build": "vite build",
+    "build": "vite build && electron-builder --publish never",
     "preview": "vite preview",
     "electron": "electron ./src/main/index.js",
     "electron:dev": "electron ./src/main/index.js",
@@ -60,13 +60,16 @@
     "date-fns": "^4.1.0",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.3",
+    "googleapis": "^171.4.0",
     "lucide-react": "^0.562.0",
+    "open": "^11.0.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.12.0",
     "tailwind-merge": "^3.4.0",
     "youtubei.js": "^17.0.1",
+    "ytdl-core": "^4.11.5",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

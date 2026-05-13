@@ -1,137 +1,91 @@
 // src/main/preload.js
-// YouTube Desktop App - Modular & Clean Preload
+// Minimal, non-duplicated preload exposing backendAPI
 
 const { contextBridge, ipcRenderer } = require("electron");
 
-console.log("✅ YouTube Desktop preload loaded (Modular pattern)");
+const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 
-// ===================== YOUTUBE API =====================
-const youtubeAPI = {
-  // Auth
-  authenticate: () => ipcRenderer.invoke("youtube:authenticate"),
-  isLoggedIn: () => ipcRenderer.invoke("youtube:isLoggedIn"),
-
-  // Feed
-  getHomeFeed: () => ipcRenderer.invoke("youtube:getHomeFeed"),
-  getSubscriptionsFeed: () =>
-    ipcRenderer.invoke("youtube:getSubscriptionsFeed"),
-  getTrendingVideos: () => ipcRenderer.invoke("youtube:getTrendingVideos"),
-
-  // Search
-  search: (query) => ipcRenderer.invoke("youtube:search", query),
-
-  // Player & Streaming
-  getVideoInfo: (videoId) =>
-    ipcRenderer.invoke("youtube:getVideoInfo", videoId),
-  getStreamingUrl: (videoId) =>
-    ipcRenderer.invoke("youtube:getStreamingUrl", videoId),
-
-  // Comments & Interactions
-  getCommentsInitial: (videoId) =>
-    ipcRenderer.invoke("youtube:getCommentsInitial", videoId),
-  getMoreComments: (videoId, continuation) =>
-    ipcRenderer.invoke("youtube:getMoreComments", videoId, continuation),
-
-  getMoreComments: (videoId, continuation) =>
-    ipcRenderer.invoke("youtube:getMoreComments", videoId, continuation),
-  commentOnVideo: (videoId, text) =>
-    ipcRenderer.invoke("youtube:commentOnVideo", videoId, text),
-  replyToComment: (commentId, text) =>
-    ipcRenderer.invoke("youtube:replyToComment", commentId, text),
-  likeVideo: (videoId) => ipcRenderer.invoke("youtube:likeVideo", videoId),
-  dislikeVideo: (videoId) =>
-    ipcRenderer.invoke("youtube:dislikeVideo", videoId),
-  likeComment: (commentId) =>
-    ipcRenderer.invoke("youtube:likeComment", commentId),
-
-  // Channel
-  getChannelInfo: (channelId) =>
-    ipcRenderer.invoke("youtube:getChannelInfo", channelId),
-  getChannelVideos: (channelId) =>
-    ipcRenderer.invoke("youtube:getChannelVideos", channelId),
-  getChannelPlaylists: (channelId) =>
-    ipcRenderer.invoke("youtube:getChannelPlaylists", channelId),
-
-  // Playlist
-  getUserPlaylists: () => ipcRenderer.invoke("youtube:getUserPlaylists"),
-  getPlaylistVideos: (playlistId) =>
-    ipcRenderer.invoke("youtube:getPlaylistVideos", playlistId),
-
-  // Related
-  getRelatedVideos: (videoId) =>
-    ipcRenderer.invoke("youtube:getRelatedVideos", videoId),
-
-  // Subscribe
-  subscribe: (channelId) => ipcRenderer.invoke("youtube:subscribe", channelId),
-  unsubscribe: (channelId) =>
-    ipcRenderer.invoke("youtube:unsubscribe", channelId),
+const subscribe = (channel, callback) => {
+  const handler = (e, ...args) => callback(...args);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
 };
 
-// ===================== MAIN EXPOSURE =====================
 contextBridge.exposeInMainWorld("backendAPI", {
-  // YouTube API (grouped)
-  youtube: youtubeAPI,
+  // Auth & session
+  youtubeAuthenticate: () => invoke("youtube:authenticate"),
+  isYouTubeLoggedIn: () => invoke("youtube:isLoggedIn"),
+  signOut: () => invoke("youtube:signOut"),
+  getUserInfo: () => invoke("youtube:getUserInfo"),
 
-  // Legacy compatibility (optional - for backward compatibility)
-  youtubeAuthenticate: youtubeAPI.authenticate,
-  isYouTubeLoggedIn: youtubeAPI.isLoggedIn,
-  getHomeFeed: youtubeAPI.getHomeFeed,
-  searchYouTube: youtubeAPI.search,
-  getYouTubeVideoInfo: youtubeAPI.getVideoInfo,
-  getYouTubeStreamingUrl: youtubeAPI.getStreamingUrl,
-   getCommentsInitial: youtubeAPI.getCommentsInitial,
-  getMoreComments: youtubeAPI.getMoreComments,
-  getYouTubeChannelInfo: youtubeAPI.getChannelInfo,
-  getYouTubeChannelVideos: youtubeAPI.getChannelVideos,
-  getYouTubeChannelPlaylists: youtubeAPI.getChannelPlaylists,
-  getSubscriptionsFeed: youtubeAPI.getSubscriptionsFeed,
-  getUserPlaylists: youtubeAPI.getUserPlaylists,
-  getPlaylistVideos: youtubeAPI.getPlaylistVideos,
-  getRelatedVideos: youtubeAPI.getRelatedVideos,
+  // Watch lists
+  getWatchLaterVideos: (continuation) => invoke("youtube:getWatchLaterVideos", continuation),
+  getWatchHistory: (continuation) => invoke("youtube:getWatchHistory", continuation),
 
-  // ===================== APP INFO =====================
-  getAppInfo: () => ipcRenderer.invoke("app:get-info"),
+  // Feeds
+  getHomeFeed: (continuation) => invoke("youtube:getHomeFeed", continuation),
+  getSubscriptionsFeed: (continuation) => invoke("youtube:getSubscriptionsFeed", continuation),
+  getTrendingVideos: (continuation) => invoke("youtube:getTrendingVideos", continuation),
 
-  // ===================== FILE OPERATIONS =====================
-  openFile: (filePath) => ipcRenderer.invoke("openFile", filePath),
-  showItemInFolder: (filePath) =>
-    ipcRenderer.invoke("showItemInFolder", filePath),
-  getFileInfo: (filePath) => ipcRenderer.invoke("getFileInfo", filePath),
-  fileExists: (filePath) => ipcRenderer.invoke("fileExists", filePath),
-  openDirectory: (dirPath) => ipcRenderer.invoke("openDirectory", dirPath),
-  getFilesInDirectory: (dirPath, extensions) =>
-    ipcRenderer.invoke("getFilesInDirectory", dirPath, extensions),
-  getRecentExports: (exportDir, limit) =>
-    ipcRenderer.invoke("getRecentExports", exportDir, limit),
-  deleteFile: (filePath) => ipcRenderer.invoke("deleteFile", filePath),
-  copyFileToClipboard: (filePath) =>
-    ipcRenderer.invoke("copyFileToClipboard", filePath),
+  // Search
+  searchYouTube: (query, continuation) => invoke("youtube:search", query, continuation),
 
-  // ===================== WINDOW CONTROL =====================
-  windowControl: (payload) => ipcRenderer.invoke("window-control", payload),
+  // Video / Player
+  getYouTubeVideoInfo: (videoId) => invoke("youtube:getVideoInfo", videoId),
+  getYouTubeStreamingUrl: (videoId) => invoke("youtube:getStreamingUrl", videoId),
 
-  // ===================== WINDOW EVENTS =====================
-  onWindowMaximized: (callback) =>
-    ipcRenderer.on("window:maximized", () => callback()),
-  onWindowRestored: (callback) =>
-    ipcRenderer.on("window:restored", () => callback()),
-  onWindowMinimized: (callback) =>
-    ipcRenderer.on("window:minimized", () => callback()),
-  onWindowClosed: (callback) =>
-    ipcRenderer.on("window:closed", () => callback()),
-  onWindowResized: (callback) =>
-    ipcRenderer.on("window:resized", (_, bounds) => callback(bounds)),
-  onWindowMoved: (callback) =>
-    ipcRenderer.on("window:moved", (_, position) => callback(position)),
+  // Comments & interactions
+  getCommentsInitial: (videoId) => invoke("youtube:getCommentsInitial", videoId),
+  getMoreComments: (videoId, continuation) => invoke("youtube:getMoreComments", videoId, continuation),
+  commentOnVideo: (videoId, text) => invoke("youtube:commentOnVideo", videoId, text),
+  replyToComment: (commentId, text) => invoke("youtube:replyToComment", commentId, text),
+  likeVideo: (videoId) => invoke("youtube:likeVideo", videoId),
+  dislikeVideo: (videoId) => invoke("youtube:dislikeVideo", videoId),
+  likeComment: (commentId) => invoke("youtube:likeComment", commentId),
 
-  // ===================== UPDATER =====================
-  updater: (payload) => ipcRenderer.invoke("updater", payload),
+  // Channel
+  getYouTubeChannelInfo: (channelId) => invoke("youtube:getChannelInfo", channelId),
+  getYouTubeChannelVideos: (channelId) => invoke("youtube:getChannelVideos", channelId),
+  getYouTubeChannelPlaylists: (channelId) => invoke("youtube:getChannelPlaylists", channelId),
 
-  openExternal: (url) => shell.openExternal(url),
+  // Playlists
+  getUserPlaylists: () => invoke("youtube:getUserPlaylists"),
+  getPlaylistVideos: (playlistId) => invoke("youtube:getPlaylistVideos", playlistId),
 
-  // ===================== GENERIC EVENT LISTENER =====================
-  on: (event, callback) => {
-    ipcRenderer.on(event, callback);
-    return () => ipcRenderer.removeListener(event, callback);
-  },
+  // Related / recommendations
+  getRelatedVideos: (videoId) => invoke("youtube:getRelatedVideos", videoId),
+
+  // App info
+  getAppInfo: () => invoke("app:get-info"),
+
+  // File operations
+  openFile: (filePath) => invoke("openFile", filePath),
+  showItemInFolder: (filePath) => invoke("showItemInFolder", filePath),
+  getFileInfo: (filePath) => invoke("getFileInfo", filePath),
+  fileExists: (filePath) => invoke("fileExists", filePath),
+  openDirectory: (dirPath) => invoke("openDirectory", dirPath),
+  getFilesInDirectory: (dirPath, extensions) => invoke("getFilesInDirectory", dirPath, extensions),
+  getRecentExports: (exportDir, limit) => invoke("getRecentExports", exportDir, limit),
+  deleteFile: (filePath) => invoke("deleteFile", filePath),
+  copyFileToClipboard: (filePath) => invoke("copyFileToClipboard", filePath),
+
+  // Window control
+  windowControl: (payload) => invoke("window-control", payload),
+
+  // Window events (subscribe helpers)
+  onWindowMaximized: (cb) => subscribe("window:maximized", cb),
+  onWindowRestored: (cb) => subscribe("window:restored", cb),
+  onWindowMinimized: (cb) => subscribe("window:minimized", cb),
+  onWindowClosed: (cb) => subscribe("window:closed", cb),
+  onWindowResized: (cb) => subscribe("window:resized", cb),
+  onWindowMoved: (cb) => subscribe("window:moved", cb),
+
+  // Updater
+  updater: (payload) => invoke("updater", payload),
+
+  // Misc
+  openExternal: (url) => invoke("openExternal", url),
+
+  // Generic event listener with unsubscribe
+  on: (event, callback) => subscribe(event, callback),
 });

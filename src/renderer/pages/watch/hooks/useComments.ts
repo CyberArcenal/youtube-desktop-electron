@@ -1,12 +1,8 @@
 // src/renderer/pages/watch/hooks/useComments.ts
 import { useState, useEffect } from "react";
-import {
-  getCommentsInitial,
-  getMoreComments,
-  replyToComment,
-  likeComment,
-  type Comment,
-} from "../../../services/index";
+import { getCommentsInitial, getMoreComments, replyToComment, likeComment } from "../../../services/comments";
+import type { Comment } from "../../../services/types";
+
 
 export function useComments(videoId: string | undefined) {
   const [comments, setComments] = useState<Comment[]>([]);

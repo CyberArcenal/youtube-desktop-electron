@@ -1,7 +1,7 @@
 // src/renderer/components/Shared/VideoGrid.tsx
 import React from 'react';
 import VideoCard from './VideoCard';
-import type { VideoItem } from '../../services/youtube';
+import type { VideoItem } from '../../services/types';
 
 interface VideoGridProps {
   videos: VideoItem[];

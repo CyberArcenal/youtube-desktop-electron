@@ -3,7 +3,7 @@ import React from "react";
 import { MessageCircle } from "lucide-react";
 import { CommentItem } from "./CommentItem";
 import { LoadMoreButton } from "./LoadMoreButton";
-import type { Comment } from "../../../services/youtube";
+import type { Comment } from "../../../services/types";
 
 interface CommentsSectionProps {
   comments: Comment[];

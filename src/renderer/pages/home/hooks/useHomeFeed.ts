@@ -1,7 +1,10 @@
 // src/renderer/pages/home/hooks/useHomeFeed.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getHomeFeed, searchVideos, isLoggedIn, authenticate } from '../../../services/index';
-import type { VideoItem } from '../../../services/index';
+import { isLoggedIn, authenticate } from '../../../services/auth';
+import { getHomeFeed } from '../../../services/feed';
+import { searchVideos } from '../../../services/search';
+import type { VideoItem } from '../../../services/types';
+
 
 interface UseHomeFeedReturn {
   videos: VideoItem[];

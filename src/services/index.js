@@ -10,31 +10,29 @@ const playlist = require("./playlist");
 const related = require("./related");
 const interactions = require("./interactions");
 const comments = require("./comments");
-const core = require("./core");
 
 module.exports = {
-  // Core
-  ...core,
-
   // Auth
   authenticate: auth.authenticate,
   isLoggedIn: auth.isLoggedIn,
   signOut: auth.signOut,
+  getUserInfo: auth.getUserInfo,   // ✅ ADDED
 
+  // Watch Later & History
   getWatchLaterVideos: watchLater.getWatchLaterVideos,
   getWatchHistory: history.getWatchHistory,
 
   // Player & Streaming
   getVideoInfo: player.getVideoInfo,
-  getVideoStreamingUrl: player.getVideoStreamingUrl,
+  getVideoStreamingUrl: player.getVideoStreamingUrl,   // ✅ RESTORED
 
   // Feed
   getHomeFeed: feed.getHomeFeed,
   getSubscriptionsFeed: feed.getSubscriptionsFeed,
-  getTrendingVideos: feed.getTrendingVideos,
+  getTrendingVideos: feed.getTrendingVideos,   // ✅ fixed signature
 
   // Comments
-   getVideoComments: comments.getVideoComments,
+  getVideoComments: comments.getVideoComments,
   getVideoCommentsWithToken: comments.getVideoCommentsWithToken,
   getMoreComments: comments.getMoreComments,
 

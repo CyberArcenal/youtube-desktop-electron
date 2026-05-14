@@ -1,4 +1,5 @@
 // src/main/services/youtube/utils.js
+
 function extractText(field) {
   if (!field) return "";
   if (typeof field === "string") return field;
@@ -8,7 +9,6 @@ function extractText(field) {
   return "";
 }
 
-// src/main/services/youtube/utils.js
 function _formatVideo(video) {
   if (!video) return null;
   let duration = "";
@@ -22,7 +22,6 @@ function _formatVideo(video) {
     duration = `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
-  // Subukan lahat ng posibleng thumbnail sources
   let thumbnail = "";
   if (video.thumbnails?.[0]?.url) {
     thumbnail = video.thumbnails[0].url;
@@ -52,4 +51,88 @@ function _formatVideo(video) {
   };
 }
 
-module.exports = { extractText, _formatVideo };
+/**
+ * Extract a continuation token from various YouTube API response shapes.
+ * @param {object} resp
+ * @returns {string|null}
+ */
+function extractContinuation(resp) {
+  if (!resp) return null;
+  if (resp.continuation) return resp.continuation;
+  if (resp.nextContinuation) return resp.nextContinuation;
+  if (resp.continuations && Array.isArray(resp.continuations) && resp.continuations[0]) {
+    return resp.continuations[0].token || resp.continuations[0].continuation || null;
+  }
+  if (resp.continuationContents && resp.continuationContents.continuations) {
+    const c = resp.continuationContents.continuations[0];
+    return c?.nextContinuation || c?.token || null;
+  }
+  if (resp.onResponseReceivedActions && Array.isArray(resp.onResponseReceivedActions)) {
+    for (const a of resp.onResponseReceivedActions) {
+      if (a.appendContinuationItemsAction?.continuationItems?.[0]?.continuationItemRenderer?.continuationEndpoint) {
+        return a.appendContinuationItemsAction.continuationItems[0].continuationItemRenderer.continuationEndpoint.token || null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract video-like items from various response shapes.
+ * @param {object} resp
+ * @returns {Array}
+ */
+function extractVideoItems(resp) {
+  if (!resp) return [];
+
+  if (Array.isArray(resp.items) && resp.items.length) return resp.items;
+  if (Array.isArray(resp.videos) && resp.videos.length) return resp.videos;
+  if (Array.isArray(resp.contents)) return resp.contents;
+
+  const candidates = [];
+
+  if (resp.playlist && Array.isArray(resp.playlist.items)) {
+    candidates.push(...resp.playlist.items);
+  }
+
+  if (resp.continuationContents) {
+    const cc = resp.continuationContents;
+    if (Array.isArray(cc.contents)) candidates.push(...cc.contents);
+    if (cc.playlistVideoListRenderer && Array.isArray(cc.playlistVideoListRenderer.contents)) {
+      candidates.push(...cc.playlistVideoListRenderer.contents);
+    }
+  }
+
+  if (resp.contents && typeof resp.contents === "object") {
+    const scan = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      if (Array.isArray(obj)) {
+        obj.forEach(scan);
+        return;
+      }
+      for (const k of Object.keys(obj)) {
+        if ((k === "contents" || k === "items") && Array.isArray(obj[k])) {
+          candidates.push(...obj[k]);
+        } else if (typeof obj[k] === "object") {
+          scan(obj[k]);
+        }
+      }
+    };
+    scan(resp.contents);
+  }
+
+  if (resp.parsed_runs && Array.isArray(resp.parsed_runs)) {
+    candidates.push(...resp.parsed_runs);
+  }
+
+  return candidates.filter((it) => {
+    if (!it) return false;
+    if (it.videoId || it.id || it.type === "video") return true;
+    if (it.video && (it.video.videoId || it.video.id)) return true;
+    if (it.content && (it.content.videoId || it.content.id)) return true;
+    if (it.videoRenderer || it.playlistVideoRenderer || it.gridVideoRenderer) return true;
+    return false;
+  });
+}
+
+module.exports = { extractText, _formatVideo, extractContinuation, extractVideoItems };

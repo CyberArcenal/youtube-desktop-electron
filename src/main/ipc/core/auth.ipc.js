@@ -1,28 +1,26 @@
 //@ts-check
 const { ipcMain } = require('electron');
-const auth = require('../../../services/auth');
+// ✅ Use the YouTube auth service, not the generic app auth
+const youtubeAuth = require('../../../services/auth');
 
 function registerAuthHandlers() {
   ipcMain.handle('youtube:authenticate', async () => {
-    await auth.authenticate();
+    await youtubeAuth.authenticate();
     return { success: true };
   });
 
   ipcMain.handle('youtube:isLoggedIn', async () => {
-    return await auth.isLoggedIn();
+    return await youtubeAuth.isLoggedIn();
   });
 
   ipcMain.handle('youtube:signOut', async () => {
-    await auth.signOut();
+    await youtubeAuth.signOut();
     return { success: true };
   });
 
   ipcMain.handle('youtube:getUserInfo', async () => {
-  return await auth.getUserInfo();
-});
-
+    return await youtubeAuth.getUserInfo();
+  });
 }
-
-
 
 module.exports = { registerAuthHandlers };

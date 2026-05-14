@@ -347,7 +347,6 @@ async function startupSequence() {
     await createMainWindow();
     loadExternalModules();
     await setupInnertubeSession();
-    core.startCookieValidityChecker(30 * 60 * 1000); // every 30 mins
 
     log("SUCCESS", "✅ Application started successfully");
   } catch (error) {
@@ -371,22 +370,4 @@ app.on("activate", () => {
 });
 app.on("before-quit", () => {
   isShuttingDown = true;
-});
-
-app.on('youtube:need-cookie-refresh', async () => {
-  // Prevent multiple calls if many listeners fire at once
-  if (global._refreshInProgress) return;
-  global._refreshInProgress = true;
-  try {
-    logger.info('Refreshing cookie from current session...');
-    const success = await auth.refreshCookiesFromCurrentSession();
-    if (success) {
-      logger.info('Cookie refreshed successfully');
-      if (mainWindow) mainWindow.webContents.send('youtube:refresh-feed');
-    } else {
-      logger.error('Failed to refresh cookie');
-    }
-  } finally {
-    global._refreshInProgress = false;
-  }
 });

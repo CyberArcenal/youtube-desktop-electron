@@ -50,6 +50,10 @@ async function getVideoInfo(videoId) {
   };
 }
 
+/**
+ * Convenience function to get only the streaming URL.
+ * Uses getVideoInfo internally.
+ */
 async function getVideoStreamingUrl(videoId) {
   const { format } = await getVideoInfo(videoId);
   return format.url;

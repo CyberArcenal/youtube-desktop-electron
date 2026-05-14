@@ -1,277 +1,223 @@
-// src/main/services/youtube/auth.js
+//@ts-check
 const core = require("./core");
-const { BrowserWindow, session: electronSession } = require("electron");
+const { BrowserWindow, shell } = require("electron");
 const { logger } = require("../utils/logger");
 
-let loginWindow = null;
-let isRefreshing = false;
-/**
- * Extract all cookies that matter for YouTube authentication from a given session
- * and also merge with the default session to catch everything.
- * Returns a cookie string or null.
- */
+let authPromise = null;
 
-async function extractAllRelevantCookies(targetSession) {
-  try {
-    const targetCookies = await targetSession.cookies.get({});
-    const defaultCookies = await electronSession.defaultSession.cookies.get({});
-    const allCookies = [...targetCookies, ...defaultCookies];
+function getMainWindow() {
+  const win = BrowserWindow.getAllWindows()[0];
+  return win;
+}
 
-    const relevant = allCookies.filter((c) => {
-      const d = (c.domain || "").toLowerCase();
-      return (
-        d.includes("youtube") ||
-        d.includes("google") ||
-        d.includes("gstatic") ||
-        d.includes("ytimg")
-      );
-    });
-
-    const cookieMap = new Map();
-    relevant.forEach((c) => {
-      const key = `${c.name}|${c.domain}`;
-      const existing = cookieMap.get(key);
-      if (
-        !existing ||
-        (c.expirationDate || 0) > (existing.expirationDate || 0)
-      ) {
-        cookieMap.set(key, c);
-      }
-    });
-
-    const cookieString = Array.from(cookieMap.values())
-      .map((c) => `${c.name}=${c.value}`)
-      .join("; ");
-
-    // Log which key cookies are present for debugging
-    const hasSapisid = cookieString.includes("SAPISID");
-    const hasLoginInfo = cookieString.includes("LOGIN_INFO");
-    const hasSsid = cookieString.includes("SSID");
-    const hasHsid = cookieString.includes("HSID");
-    logger.info(
-      `✅ Extracted ${cookieMap.size} cookies. SAPISID: ${hasSapisid}, LOGIN_INFO: ${hasLoginInfo}, SSID: ${hasSsid}, HSID: ${hasHsid}`,
-    );
-
-    if (!hasSapisid)
-      logger.warn("⚠️ SAPISID cookie is missing! Login may fail.");
-    if (!hasLoginInfo)
-      logger.warn("⚠️ LOGIN_INFO cookie is missing! YouTube auth may fail.");
-
-    return cookieString;
-  } catch (err) {
-    logger.error("Cookie extraction failed:", err);
-    return null;
+function safeSend(channel, payload) {
+  const win = getMainWindow();
+  if (win && win.webContents && typeof win.webContents.send === "function") {
+    try {
+      win.webContents.send(channel, payload);
+    } catch (err) {
+      logger.debug("Failed to send IPC message:", channel, err.message);
+    }
   }
 }
 
-/**
- * Refresh cookies from the current default session,
- * save them, and recreate Innertube instance.
- * Returns true if successful, false otherwise.
- */
-
-async function refreshCookiesFromCurrentSession() {
-  if (isRefreshing) {
-    logger.info("Cookie refresh already in progress, skipping...");
-    return false;
-  }
-  isRefreshing = true;
+async function authenticate(opts = {}) {
+  if (authPromise) return authPromise;
+  authPromise = _authenticate(opts);
   try {
-    const cookieString = await extractAllRelevantCookies(
-      electronSession.defaultSession,
-    );
-    if (!cookieString) {
-      logger.warn("No cookies extracted from default session.");
-      return false;
-    }
-
-    core.saveCookie(cookieString);
-    core.resetInnertube();
-
-    const newInnertube = await core.getInnertube(true);
-    const account = await newInnertube.account.getInfo().catch(() => null);
-
-    if (account?.name) {
-      logger.info(`✅ Successfully logged in as: ${account.name}`);
-      const mainWin = BrowserWindow.getAllWindows()[0];
-      if (mainWin) {
-        mainWin.webContents.send("auth:success", {
-          message: `Logged in as ${account.name}`,
-          user: { name: account.name, avatar: account.thumbnails?.[0]?.url },
-        });
-        mainWin.webContents.send("youtube:refresh-feed");
-      }
-      return true;
-    } else {
-      logger.warn("Cookie saved but account info still unavailable.");
-      return false;
-    }
-  } catch (err) {
-    logger.error("Failed to extract cookies from session:", err.message);
-    return false;
+    return await authPromise;
   } finally {
-    isRefreshing = false;
+    authPromise = null;
   }
 }
 
-/**
- * Main authentication function.
- * Tries to restore from existing session first.
- * If that fails, opens a login window.
- */
-async function authenticate() {
-  // First, try to restore cookies from the live session
-  const restored = await refreshCookiesFromCurrentSession();
-  if (restored) {
-    return { success: true, message: "Session restored" };
+async function _authenticate(opts = {}) {
+  const { timeoutMs = 5 * 60 * 1000 } = opts;
+
+  const yt = await core.getInnertube(true);
+  if (!yt || !yt.session) {
+    const msg = "Innertube or session unavailable for authentication";
+    logger.error(msg);
+    throw new Error(msg);
   }
 
-  // No valid session – open a login window
-  logger.info("🔐 Opening YouTube Login Window...");
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        logger.warn("Authentication timed out after", timeoutMs, "ms");
+        cleanup();
+        reject(new Error("Authentication timed out"));
+      }
+    }, timeoutMs);
 
-  loginWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
-    title: "YouTube Login",
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
+    const onAuthPending = (data) => {
+      logger.info("auth-pending event received");
+      const verificationUrl =
+        data.verification_url ||
+        data.verificationUrl ||
+        data.verificationURI ||
+        null;
 
-  await loginWindow.loadURL(
-    "https://accounts.google.com/signin/v2/identifier?service=youtube&continue=https%3A%2F%2Fwww.youtube.com",
-  );
+      if (verificationUrl) {
+        const separator = verificationUrl.includes("?") ? "&" : "?";
+        const urlWithCode = `${verificationUrl}${separator}user_code=${data.user_code || ""}`;
+        shell.openExternal(urlWithCode).catch((e) => logger.warn("shell.openExternal failed:", e.message));
+        safeSend("auth:pending", { verificationUrl, userCode: data.user_code });
+      }
+    };
 
-  // src/main/services/youtube/auth.js – modify `authenticate` function
-
-  // Inside the login window's did-navigate handler, replace the extraction block:
-
-  loginWindow.webContents.on("did-navigate", async (event, url) => {
-    if (url.includes("youtube.com") && !url.includes("accounts.google.com")) {
-      logger.info(
-        "User navigated to YouTube, waiting for cookies to stabilize...",
-      );
-
-      // Wait 2 seconds for any async cookie setting
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Optional: wait for the page to fully load
-      await loginWindow.webContents.executeJavaScript(
-        'document.readyState === "complete"',
-      );
-
-      logger.info("Extracting cookies after stabilization");
-      const cookieString = await extractAllRelevantCookies(
-        loginWindow.webContents.session,
-      );
-
-      // Verify essential cookies exist
-      if (
-        cookieString &&
-        cookieString.includes("SAPISID") &&
-        cookieString.includes("LOGIN_INFO")
-      ) {
-        core.saveCookie(cookieString);
-        core.resetInnertube();
-
-        // Force recreate Innertube and verify account
-        const yt = await core.getInnertube(true);
-        const account = await yt.account.getInfo().catch(() => null);
-        if (account?.name) {
-          logger.info(`✅ Successfully logged in as: ${account.name}`);
-          const mainWin = BrowserWindow.getAllWindows()[0];
-          if (mainWin) {
-            mainWin.webContents.send("auth:success", {
-              message: `Welcome, ${account.name}!`,
-              user: {
-                name: account.name,
-                avatar: account.thumbnails?.[0]?.url,
-              },
-            });
-            mainWin.webContents.send("youtube:refresh-feed");
-          }
-          if (loginWindow) loginWindow.close();
+    const onAuth = async (event) => {
+      logger.info("auth event received");
+      try {
+        if (event?.credentials) {
+          core.saveCredentials(event.credentials);
         } else {
-          logger.error(
-            "Cookie saved but account info still unavailable – login may have failed",
-          );
+          const creds =
+            typeof yt.session.exportCredentials === "function"
+              ? await yt.session.exportCredentials()
+              : yt.session.credentials;
+          if (creds) core.saveCredentials(creds);
         }
-      } else {
-        logger.error("Missing required cookies (SAPISID or LOGIN_INFO)");
+
+        if (!settled) {
+          settled = true;
+          cleanup();
+          resolve(event?.credentials || yt.session.credentials || { success: true });
+          safeSend("auth:success", event?.credentials || {});
+        }
+      } catch (err) {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          reject(err);
+        }
       }
+    };
+
+    const onAuthError = (err) => {
+      if (!settled) {
+        settled = true;
+        logger.error("Authentication error event:", err && err.message ? err.message : err);
+        cleanup();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (yt.session.off) {
+        yt.session.off("auth-pending", onAuthPending);
+        yt.session.off("auth", onAuth);
+        yt.session.off("auth-error", onAuthError);
+      } else if (yt.session.removeListener) {
+        yt.session.removeListener("auth-pending", onAuthPending);
+        yt.session.removeListener("auth", onAuth);
+        yt.session.removeListener("auth-error", onAuthError);
+      }
+    };
+
+    if (yt.session.on) {
+      yt.session.on("auth-pending", onAuthPending);
+      yt.session.on("auth", onAuth);
+      yt.session.on("auth-error", onAuthError);
+    } else {
+      reject(new Error("Session interface incompatible"));
+      return;
     }
-  });
 
-  loginWindow.webContents.on(
-    "did-fail-load",
-    (event, errorCode, errorDescription) => {
-      if (errorCode === -3) {
-        logger.warn("Load aborted, retrying login page...");
-        if (loginWindow && !loginWindow.isDestroyed()) {
-          loginWindow.loadURL(
-            "https://accounts.google.com/signin/v2/identifier?service=youtube&continue=https%3A%2F%2Fwww.youtube.com",
-          );
+    (async () => {
+      try {
+        logger.info("Auth flow: starting signIn()");
+        await yt.session.signIn();
+        logger.info("signIn() resolved");
+        if (!settled) {
+          setTimeout(() => {
+            if (!settled) {
+              logger.info("No 'auth' event after signIn, resolving with current session");
+              settled = true;
+              cleanup();
+              resolve(yt.session.credentials || { success: true });
+            }
+          }, 2000);
+        }
+      } catch (err) {
+        if (!settled) {
+          logger.error("signIn() error:", err && err.message ? err.message : err);
+          cleanup();
+          reject(err instanceof Error ? err : new Error(String(err)));
         }
       }
-    },
-  );
-
-  loginWindow.on("closed", () => {
-    loginWindow = null;
+    })();
   });
-
-  return { success: true, message: "Login window opened" };
-}
-
-// Helper for manual cookie save
-async function saveProvidedCookie(cookieString) {
-  return core.saveCookie(cookieString);
 }
 
 async function isLoggedIn() {
   try {
-    const cookie = core.loadCookie();
-    return !!cookie;
-  } catch {
+    const savedCreds = core.loadCredentials();
+    if (savedCreds?.oauth2_tokens?.expiry_date) {
+      const expiry = new Date(savedCreds.oauth2_tokens.expiry_date);
+      if (expiry.getTime() > Date.now()) return true;
+    }
+    const yt = await core.getInnertube();
+    if (!yt?.session) return false;
+    if (typeof yt.session.logged_in === "boolean") return yt.session.logged_in;
+    if (typeof yt.session.isLoggedIn === "function") return !!yt.session.isLoggedIn();
+    return !!yt.session.credentials;
+  } catch (err) {
+    logger.debug("isLoggedIn check failed:", err.message);
     return false;
   }
 }
 
+/**
+ * Get current user info (name, avatar, channel id) from YouTube session.
+ */
 async function getUserInfo() {
   try {
     const yt = await core.getInnertube();
-    const account = await yt.account.getInfo().catch(() => null);
-    return account
-      ? {
-          name: account.name,
-          avatar: account.thumbnails?.[0]?.url,
-          isLoggedIn: true,
-        }
-      : null;
+    if (!yt?.session || !yt.session.logged_in) return null;
+    
+    // Try to get account info – method may vary per youtubei.js version
+    if (typeof yt.session.getAccountInfo === "function") {
+      const account = await yt.session.getAccountInfo();
+      return {
+        name: account.name || null,
+        email: account.email || null,
+        avatar: account.avatar?.url || null,
+        channelId: account.channel_id || null,
+      };
+    }
+    
+    // Fallback: get from basic info
+    const basic = yt.session.credentials?.oauth2_tokens;
+    return {
+      name: null,
+      email: basic?.email || null,
+      avatar: null,
+      channelId: null,
+    };
   } catch (err) {
-    logger.debug("getUserInfo failed:", err.message);
+    logger.error("getUserInfo failed:", err.message);
     return null;
   }
 }
 
 async function signOut() {
-  core.clearCookie();
-  core.resetInnertube();
-  // Notify renderer to clear user info
-  const mainWin = BrowserWindow.getAllWindows()[0];
-  if (mainWin) {
-    mainWin.webContents.send("auth:signout");
-    mainWin.webContents.send("youtube:refresh-feed");
+  try {
+    const yt = await core.getInnertube();
+    if (!yt?.session) {
+      logger.warn("No session available to sign out");
+      return;
+    }
+    await yt.session.signOut();
+    core.clearCredentials();
+    core.clearCookie();
+    core.resetInnertube();
+  } catch (err) {
+    logger.error("Sign out failed:", err.message);
   }
-  return true;
 }
 
-module.exports = {
-  authenticate,
-  saveProvidedCookie,
-  isLoggedIn,
-  getUserInfo,
-  signOut,
-  refreshCookiesFromCurrentSession,
-};
+module.exports = { authenticate, isLoggedIn, getUserInfo, signOut };
